@@ -24,11 +24,16 @@ on init
     symlink /storage/usbdisk /mnt/usbdisk
     symlink /data/app /factory
 
+    mkdir /tombstones
+
+# Baseband
     mkdir /efs 0771 radio system
-    symlink /dev/block/mmcblk0p13 /dev/mbin0
+    symlink /dev/block/platform/15540000.dwmmc0/by-name/RADIO /dev/mbin0
     restorecon /dev/mbin0
+
     symlink  /sys/devices/15510000.usb/ehci_power /dev/ehci_power
     symlink  /sys/devices/10f24000.mipi-lli /dev/mipi-lli
+
     write /sys/class/net/rmnet0/queues/rx-0/rps_cpus 1
     write /sys/class/net/rmnet1/queues/rx-0/rps_cpus 1
     write /sys/class/net/rmnet2/queues/rx-0/rps_cpus 1
@@ -37,9 +42,7 @@ on init
     write /sys/class/net/rmnet5/queues/rx-0/rps_cpus 1
     write /sys/class/net/rmnet6/queues/rx-0/rps_cpus 1
     write /sys/class/net/rmnet7/queues/rx-0/rps_cpus 1
-    write /proc/sys/net/core/netdev_max_backlog 5000
-
-    mkdir /tombstones
+    write /proc/sys/net/core/netdev_max_backlog 8192
 
 # Support Preload install apks
     mkdir /preload 0771 system system
@@ -68,6 +71,8 @@ on post-fs-data
     # Permissions Camera
     chown system radio /sys/class/camera/rear/rear_camfw
     chown system radio /sys/class/camera/rear/rear_camfw_full
+    chown system radio /sys/class/camera/rear/rear_checkfw_user
+    chown system radio /sys/class/camera/rear/rear_checkfw_factory
     chown system radio /sys/class/camera/rear/rear_camtype
     chown system radio /sys/class/camera/rear/rear_companionfw
     chown system radio /sys/class/camera/rear/rear_companionfw_full
@@ -77,10 +82,17 @@ on post-fs-data
     chown system radio /sys/class/camera/front/front_camfw
     chown system radio /sys/class/camera/front/front_camtype
 
+    # Permissions for Camera to flush cache buffers
+    chown system system /sys/devices/virtual/sec/sec_misc/drop_caches
+
 #Private Mode
     mkdir /data/privatemode 0770 system system
     chown system system /data/privatemode
     restorecon /data/privatemode
+
+# Audio
+    mkdir /data/firmware 0770 media system
+    chown media system /data/firmware
 
 on boot
     mount debugfs /sys/kernel/debug /sys/kernel/debug
@@ -98,7 +110,10 @@ on boot
     setprop net.tcp.buffersize.gprs    6138,45000,45000,6144,13140,17520
     setprop net.tcp.buffersize.evdo    6141,131070,393216,6144,24576,393216
 
-	# For setting tcp delayed ack
+    # Allow to access debugfs for system:system
+    chown system system /sys/kernel/debug
+
+    # For setting tcp delayed ack
     chown system system /sys/kernel/ipv4/tcp_delack_seg
     chown system system /sys/kernel/ipv4/tcp_use_userconfig
 
@@ -216,6 +231,7 @@ on boot
 
 # DRK permission
     mkdir /efs/prov 0770 radio system
+    mkdir /efs/prov_data 0770 radio system
     chown radio system /efs/prov_data
     chmod 0770 /efs/prov_data
     chown radio system /efs/prov_data/dev_root
@@ -349,6 +365,7 @@ on boot
     chown radio system /sys/class/secgpio_check/secgpio_check_all/gpioinit_check
     chown radio system /sys/class/secgpio_check/secgpio_check_all/gpiosleep_check
     chown radio system /sys/class/secgpio_check/secgpio_check_all/checked_sleepGPIO
+    chown system system /sys/devices/gpio_keys.10/input/input8/enabled
 
 # CPU Idle
     chown system radio /sys/module/cpuidle/parameters/enable_mask
@@ -369,6 +386,7 @@ on fs
     mount_all /fstab.universal5430
     setprop ro.crypto.fuse_sdcard true
 
+# MIF
     chown radio radio /sys/devices/virtual/misc/multipdp/waketime
     chmod 0660 /sys/devices/virtual/misc/umts_dm0/dm_state
     chown radio system /sys/devices/virtual/misc/umts_dm0/dm_state
@@ -439,20 +457,24 @@ on fs
     chown system system /sys/class/mdnie/mdnie/accessibility
     chown system system /sys/class/mdnie/mdnie/auto_brightness
     chown system system /sys/class/mdnie/mdnie/sensorRGB
+    # AUTO mode
+    write /sys/class/mdnie/mdnie/mode 4
 
 # Permissions for TouchScreen
-	chown system radio /sys/class/sec/tsp/cmd
-	chown system system /sys/class/sec/tsp/input/enabled
+    chown system radio /sys/class/sec/tsp/cmd
+    chown system system /sys/class/sec/tsp/input/enabled
 
 # Permissions for Touchkey
-	chown system radio /sys/class/sec/sec_touchkey/brightness
-	chown system radio /sys/class/sec/sec_touchkey/touchkey_firm_update
-	chown system radio /sys/class/sec/sec_touchkey/touch_sensitivity
-	chown system radio /sys/class/sec/sec_touchkey/glove_mode
-	chown system radio /sys/class/sec/sec_touchkey/flip_mode
-	chown system radio /sys/class/sec/sec_touchkey/boost_level
-	chown system system /sys/class/sec/sec_touchkey/input/enabled
-	chown root system /sys/class/sec/sec_touchkey/tsp_keys_enabled
+    chown system radio /sys/class/sec/sec_touchkey/brightness
+    chown system radio /sys/class/sec/sec_touchkey/touchkey_firm_update
+    chown system radio /sys/class/sec/sec_touchkey/touch_sensitivity
+    chown system radio /sys/class/sec/sec_touchkey/glove_mode
+    chown system radio /sys/class/sec/sec_touchkey/flip_mode
+    chown system radio /sys/class/sec/sec_touchkey/boost_level
+    chown system system /sys/class/sec/sec_touchkey/input/enabled
+    # key enabler
+    chown system radio /sys/class/sec/sec_touchkey/keypad_enable
+    chmod 0664 /sys/class/sec/sec_touchkey/keypad_enable
 
 # Permissions for gpio_keys
     chown radio system /sys/class/sec/sec_key/wakeup_keys
@@ -921,10 +943,11 @@ on fs
 # ARGOSD network_throughput
     chown system system /dev/network_throughput
 
-service cpboot-daemon /system/bin/cbd -d -txmm72xx -bl -ml -p 13
+# CP Boot Daemon (CBD)
+service cpboot-daemon /system/bin/cbd
     class main
     user root
-    group radio cache inet misc audio sdcard_rw log sdcard_r shell
+    group radio cache inet misc audio sdcard_r sdcard_rw log shell
 
 service netmgrd /system/bin/netmgrd
     class late_start
@@ -1078,3 +1101,69 @@ service swapon /sbin/sswap -s
     user root
     group root
     oneshot
+
+on property:sys.boot_completed=1
+
+    # Start to configure the CPU governors
+    #write /sys/devices/system/cpu/cpu0/online 1
+    write /sys/devices/system/cpu/cpu1/online 1
+    write /sys/devices/system/cpu/cpu2/online 1
+    write /sys/devices/system/cpu/cpu3/online 1
+    write /sys/devices/system/cpu/cpu4/online 1
+    write /sys/devices/system/cpu/cpu5/online 1
+    write /sys/devices/system/cpu/cpu6/online 1
+    write /sys/devices/system/cpu/cpu7/online 1
+
+    # Interactive governor
+    write /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor interactive
+    write /sys/devices/system/cpu/cpu1/cpufreq/scaling_governor interactive
+    write /sys/devices/system/cpu/cpu2/cpufreq/scaling_governor interactive
+    write /sys/devices/system/cpu/cpu3/cpufreq/scaling_governor interactive
+    write /sys/devices/system/cpu/cpu4/cpufreq/scaling_governor interactive
+    write /sys/devices/system/cpu/cpu5/cpufreq/scaling_governor interactive
+    write /sys/devices/system/cpu/cpu6/cpufreq/scaling_governor interactive
+    write /sys/devices/system/cpu/cpu7/cpufreq/scaling_governor interactive
+
+    # Interactive governor for LITTLE cluster
+    write /sys/devices/system/cpu/cpu0/cpufreq/interactive/timer_rate 20000
+    write /sys/devices/system/cpu/cpu0/cpufreq/interactive/timer_slack 20000
+    write /sys/devices/system/cpu/cpu0/cpufreq/interactive/min_sample_time 40000
+    write /sys/devices/system/cpu/cpu0/cpufreq/interactive/hispeed_freq 1000000
+    write /sys/devices/system/cpu/cpu0/cpufreq/interactive/target_loads 75
+    write /sys/devices/system/cpu/cpu0/cpufreq/interactive/go_hispeed_load 84
+    write /sys/devices/system/cpu/cpu0/cpufreq/interactive/above_hispeed_delay 39000
+    write /sys/devices/system/cpu/cpu0/cpufreq/interactive/boostpulse_duration 40000
+    write /sys/devices/system/cpu/cpu0/cpufreq/interactive/multi_enter_load 800
+    write /sys/devices/system/cpu/cpu0/cpufreq/interactive/multi_enter_time 80000
+    write /sys/devices/system/cpu/cpu0/cpufreq/interactive/multi_exit_load 360
+    write /sys/devices/system/cpu/cpu0/cpufreq/interactive/multi_exit_time 320000
+    write /sys/devices/system/cpu/cpu0/cpufreq/interactive/param_index 0
+    write /sys/devices/system/cpu/cpu0/cpufreq/interactive/single_enter_load 200
+    write /sys/devices/system/cpu/cpu0/cpufreq/interactive/single_enter_time 160000
+    write /sys/devices/system/cpu/cpu0/cpufreq/interactive/single_exit_load 90
+    write /sys/devices/system/cpu/cpu0/cpufreq/interactive/single_exit_time 80000
+
+    # Interactive governor for big cluster
+    write /sys/devices/system/cpu/cpu4/cpufreq/interactive/timer_rate 20000
+    write /sys/devices/system/cpu/cpu4/cpufreq/interactive/timer_slack 20000
+    write /sys/devices/system/cpu/cpu4/cpufreq/interactive/min_sample_time 40000
+    write /sys/devices/system/cpu/cpu4/cpufreq/interactive/hispeed_freq 1000000
+    write /sys/devices/system/cpu/cpu4/cpufreq/interactive/target_loads "80 1000000:82 1200000:85 1500000:90"
+    write /sys/devices/system/cpu/cpu4/cpufreq/interactive/go_hispeed_load 89
+    write /sys/devices/system/cpu/cpu4/cpufreq/interactive/above_hispeed_delay "79000 1200000:119000 1700000:19000"
+    write /sys/devices/system/cpu/cpu4/cpufreq/interactive/boostpulse_duration 40000
+    write /sys/devices/system/cpu/cpu4/cpufreq/interactive/multi_enter_load 360
+    write /sys/devices/system/cpu/cpu4/cpufreq/interactive/multi_enter_time 99000
+    write /sys/devices/system/cpu/cpu4/cpufreq/interactive/multi_exit_load 240
+    write /sys/devices/system/cpu/cpu4/cpufreq/interactive/multi_exit_time 299000
+    write /sys/devices/system/cpu/cpu4/cpufreq/interactive/param_index 0
+    write /sys/devices/system/cpu/cpu4/cpufreq/interactive/single_enter_load 95
+    write /sys/devices/system/cpu/cpu4/cpufreq/interactive/single_enter_time 199000
+    write /sys/devices/system/cpu/cpu4/cpufreq/interactive/single_exit_load 60
+    write /sys/devices/system/cpu/cpu4/cpufreq/interactive/single_exit_time 99000
+
+    # cpufreq
+    write /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq 1300000
+    write /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq 500000
+    write /sys/devices/system/cpu/cpu4/cpufreq/scaling_max_freq 1800000
+    write /sys/devices/system/cpu/cpu4/cpufreq/scaling_min_freq 800000
